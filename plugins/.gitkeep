@@ -1,0 +1,2 @@
+# 扩展点（plugins/）
+新增辖区/事件类型：在 REPORTING_RULES 加一项。

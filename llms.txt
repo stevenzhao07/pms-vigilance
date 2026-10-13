@@ -1,0 +1,8 @@
+pms-vigilance
+========================
+可插拔模块（lgd-skeleton/1.0）。上市后监督与警戒工具（报告时限/召回分级/PSUR）。
+入口: scripts/pms_report.py
+元数据: module.json
+总入口: medical-ai-toolkit
+关联: iso14971-risk-file, samd-ra-toolkit, clinical-evaluation
+许可: Apache-2.0 · 贡献者: @stevenzhao07 (MedXpert)

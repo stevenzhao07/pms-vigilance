@@ -1,0 +1,45 @@
+{
+  "id": "pms-vigilance",
+  "title": "上市后监督与警戒工具（报告时限/召回分级/PSUR）",
+  "description": "上市后监督（PMS）与警戒（Vigilance）时限计算与合规工具：NMPA 不良事件报告（死亡 7 日/严重伤害 20 日/群体 12 小时）、EU MDR Art.87（2/10/15 天）、FDA MDR（30 日/5 工作日/806 召回 10 工作日）、召回分级时限表（NMPA 一级 1 日起/FDA Class I–III）、PSUR/定期风险评价周期。输入获知日期，输出各辖区截止日。",
+  "triggers": {
+    "keywords": [
+      "pms",
+      "vigilance",
+      "不良事件",
+      "警戒",
+      "召回",
+      "psur",
+      "pmcf",
+      "mdr",
+      "fsca"
+    ],
+    "file_patterns": [
+      "pms_report.py"
+    ],
+    "intents": [
+      "不良事件报告时限",
+      "召回分级",
+      "PSUR 周期",
+      "FSCA"
+    ]
+  },
+  "provides": [
+    "pms-vigilance",
+    "report-deadline",
+    "recall-levels",
+    "psur-cycle"
+  ],
+  "skills": [],
+  "needs_backends": [],
+  "license": "Apache-2.0",
+  "upstream": null,
+  "cost": "low",
+  "lazy": true,
+  "nested": true,
+  "entry": "scripts/pms_report.py",
+  "deps": [],
+  "generated_by": "lgd-skeleton/1.0 (manual port from rea scaffold)",
+  "idea": "PMS/警戒时限计算器（NMPA/MDR/FDA 报告与召回时限）",
+  "extension_note": "新增辖区/事件类型：在 REPORTING_RULES 加一项。"
+}
