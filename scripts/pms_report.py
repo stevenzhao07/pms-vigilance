@@ -35,6 +35,27 @@ import datetime as dt
 import sys
 
 # 辖区 × 事件类型 → (时限值, 单位: day/workday/hour, 法规出处)
+# --- 辖区别名归一化（2026-10-14 跨模块统一词表）---
+# 目标：同一句话在医疗线各模块间通用——既接受 ISO 国家码，也接受监管机构缩写。
+# 注意：东盟(ASEAN) / 拉美(LATAM) 尚无实现，仍会被下方校验明确拒绝。
+_JURIS_ALIAS = {
+    "CN": "CN", "NMPA": "CN", "CHINA": "CN",
+    "US": "US", "USA": "US", "FDA": "US",
+    "EU": "EU", "MDR": "EU", "CE": "EU",
+    "JP": "JP", "JAPAN": "JP", "PMDA": "JP",
+}
+_JURIS_LOCAL = {"CN": "CN", "US": "FDA", "EU": "EU"}
+
+
+def _norm_juris(j):
+    """把用户输入归一化到本模块内部键；未知值原样返回，交由原校验明确拒绝。"""
+    s = (j or "").strip().upper()
+    c = _JURIS_ALIAS.get(s)
+    if c is None:
+        return s
+    return _JURIS_LOCAL.get(c, c)
+
+
 REPORTING_RULES = {
     ("CN", "death"): (7, "day", "《医疗器械不良事件监测和再评价管理办法》第二十五条"),
     ("CN", "serious"): (20, "day", "同上"),
@@ -152,14 +173,17 @@ def _demo() -> int:
 def main() -> int:
     ap = argparse.ArgumentParser(description="PMS/警戒时限计算器")
     ap.add_argument("--demo", action="store_true", help="跑内置演示")
+    ap.add_argument("--selftest", action="store_true", help="跑内置自测（断言 + 负对照 + xfail）")
     ap.add_argument("--aware", help="获知日期 YYYY-MM-DD")
-    ap.add_argument("--jurisdiction", help="CN/EU/FDA")
+    ap.add_argument("--jurisdiction", help="CN|NMPA | US|FDA | EU|MDR | JP|PMDA | ALL（别名互通；ASEAN/LATAM 未实现）")
     ap.add_argument("--event", help="事件类型（见 --list-events）")
     ap.add_argument("--list-events", action="store_true", help="列出各辖区事件类型")
     ap.add_argument("--recall", action="store_true", help="打印召回分级时限表")
     ap.add_argument("--level", type=int, choices=[1, 2, 3], default=1, help="召回级别")
     ap.add_argument("--psur", action="store_true", help="打印 PSUR/定期风险评价周期")
     args = ap.parse_args()
+    if getattr(args, "selftest", False):
+        return _selftest()
 
     if args.demo:
         return _demo()
@@ -183,7 +207,7 @@ def main() -> int:
             print(f"[error] --aware 须为 YYYY-MM-DD（收到 {args.aware!r}）", file=sys.stderr)
             return 2
         try:
-            row = deadline(d, args.jurisdiction, args.event)
+            row = deadline(d, _norm_juris(args.jurisdiction), args.event)
         except ValueError as e:
             print(f"[error] {e}", file=sys.stderr)
             return 2
@@ -191,6 +215,58 @@ def main() -> int:
         return 0
     ap.print_help()
     return 2
+
+
+# ==================== 内置自测（--selftest） ====================
+# 由 conformance 补丁于 2026-10-14 生成（生成器 v2）。
+# 特性：端到端 CLI 调用 + 内容断言 + 负对照 + xfail（已知缺陷显式标注，不掩盖）。
+_SELFTEST_CASES = [(['--demo'], 0, ['召回', 'PSUR'], [], None), (['--aware', '2026-10-01', '--jurisdiction', 'CN', '--event', 'death'], 0, ['2026-10-08'], [], None), (['--aware', '2026-10-01', '--jurisdiction', 'EU', '--event', 'death'], 0, ['2026-10-11'], [], None), (['--aware', '2026-10-01', '--jurisdiction', 'FDA', '--event', 'mdr_5work'], 0, ['2026-10-08'], [], None), (['--aware', '2026-10-01', '--jurisdiction', 'XX', '--event', 'death'], 2, [], [], None), (['--aware', 'not-a-date', '--jurisdiction', 'CN', '--event', 'death'], 2, [], [], None)]
+
+
+def _selftest() -> int:
+    import os as _os
+    import subprocess as _sp
+    _here = _os.path.dirname(_os.path.abspath(__file__))
+    # 仓库根：脚本位于 <repo>/scripts/ 时取上一级；否则取脚本所在目录
+    _root = _os.path.dirname(_here) if _os.path.basename(_here) == "scripts" else _here
+    _script = _os.path.abspath(__file__)
+    _fail, _xfail, _n = [], [], 0
+    for _case in _SELFTEST_CASES:
+        _args, _rc, _must, _mustnot = _case[0], _case[1], _case[2], _case[3]
+        _reason = _case[4] if len(_case) > 4 else None
+        _n += 1
+        _p = _sp.run([sys.executable, _script] + _args, capture_output=True, cwd=_root)
+        _out = _p.stdout.decode("utf-8", "replace")
+        _bad = []
+        if _p.returncode != _rc:
+            _bad.append(f"rc={_p.returncode} 期望 {_rc}")
+        for _m in _must:
+            if _m not in _out:
+                _bad.append(f"输出缺少 {_m!r}")
+        for _m in _mustnot:
+            if _m in _out:
+                _bad.append(f"输出含禁止内容 {_m!r}")
+        if _rc == 0 and not _out.strip():
+            _bad.append("rc=0 但输出为空（假绿）")
+        if _bad:
+            if _reason:
+                _xfail.append(f"xfail args={_args}：{'；'.join(_bad)} ← 已知缺陷：{_reason}")
+            else:
+                _fail.append(f"args={_args}：{'；'.join(_bad)}")
+    # 通用负对照：未知参数必须非零
+    _n += 1
+    _p = _sp.run([sys.executable, _script, "--__nonexistent_flag__"], capture_output=True, cwd=_root)
+    if _p.returncode == 0:
+        _fail.append("负对照失败：未知参数竟返回 0")
+    for _x in _xfail:
+        print("[selftest][xfail] " + _x)
+    if _fail:
+        print(f"[selftest] FAILED {len(_fail)}/{_n}")
+        for _f in _fail:
+            print("  - " + _f)
+        return 1
+    print(f"[selftest] PASS {_n - len(_xfail)}/{_n}（含负对照；xfail {len(_xfail)} 项为已知缺陷）")
+    return 0
 
 
 if __name__ == "__main__":
